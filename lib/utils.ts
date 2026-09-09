@@ -17,8 +17,8 @@ export function slugify(name: string) {
     .replace(/^-+|-+$/g, "")
 }
 
-// "%40gabi" / "@gabi" -> "gabi". The [handle] URL segment carries a leading
-// "@", the user.handle column stores it without one.
+// "%40alexandra" / "@alexandra" -> "alexandra". The [handle] URL segment
+// carries a leading "@", the user.handle column stores it without one.
 export function parseHandleSegment(segment: string) {
   return decodeURIComponent(segment).replace(/^@/, "")
 }
@@ -38,7 +38,7 @@ export function formatFileSize(bytes: number) {
   return `${size.toFixed(decimals)} ${units[unit]}`
 }
 
-// "Gabi Ionescu" -> "GI". The user table has no initials column.
+// "Alexandra Badila" -> "AB". The user table has no initials column.
 export function getInitials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean)
   return (

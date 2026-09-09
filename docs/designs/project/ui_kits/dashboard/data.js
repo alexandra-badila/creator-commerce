@@ -1,6 +1,6 @@
 // Mock data for the Creator Commerce dashboard UI kit.
 window.CC_DATA = {
-  user: { name: "Gabi Ionescu", handle: "@gabi", email: "gabi@example.com", initials: "GI" },
+  user: { name: "Alexandra", handle: "@alexandra", email: "alexandra@example.com", initials: "AB" },
   kpis: [
     { label: "Revenue", value: "$4,280", sub: "last 30 days", delta: "+12%", up: true },
     { label: "Units sold", value: "142", sub: "last 30 days", delta: "+8%", up: true },
@@ -9,7 +9,7 @@ window.CC_DATA = {
   ],
   checklist: [
     { done: true, label: "Create your account" },
-    { done: true, label: "Claim your handle", sub: "creatorcommerce.com/@gabi" },
+    { done: true, label: "Claim your handle", sub: "creatorcommerce.com/@alexandra" },
     { done: true, label: "Publish your first product" },
     { done: false, label: "Connect Stripe to get paid" },
     { done: false, label: "Share your storefront link" },

@@ -55,7 +55,7 @@ app/
     └── help/first-sale/page.tsx   # /help/first-sale
 ```
 
-> **Note on `/@handle`:** in Next.js, an `@name` folder inside `app/` means a *parallel routes slot*, not a URL segment. The storefront is implemented as a dynamic segment `[handle]`, where the param arrives with the `@` prefix from the URL (e.g. `params.handle === "@gabi"`) and is validated/stripped in the page. Segments without `@` get a 404 (or are reserved for other routes).
+> **Note on `/@handle`:** in Next.js, an `@name` folder inside `app/` means a *parallel routes slot*, not a URL segment. The storefront is implemented as a dynamic segment `[handle]`, where the param arrives with the `@` prefix from the URL (e.g. `params.handle === "@alexandra"`) and is validated/stripped in the page. Segments without `@` get a 404 (or are reserved for other routes).
 
 ## 1. Marketing layout
 

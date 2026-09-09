@@ -84,13 +84,13 @@ function Signup({ go }) {
       <h1 style={{ fontFamily:"var(--font-heading)", fontWeight:500, fontSize:20, margin:"0 0 4px" }}>Create your account</h1>
       <p style={{ fontSize:14, color:"var(--muted-foreground)", margin:"0 0 20px" }}>Claim your handle and start selling.</p>
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-        <div style={fieldCol}><Label htmlFor="n">Name</Label><Input id="n" placeholder="Gabi Ionescu" /></div>
+        <div style={fieldCol}><Label htmlFor="n">Name</Label><Input id="n" placeholder="Alexandra" /></div>
         <div style={fieldCol}><Label htmlFor="e2">Email</Label><Input id="e2" type="email" placeholder="you@example.com" /></div>
         <div style={fieldCol}>
           <Label htmlFor="h">Storefront handle</Label>
           <div style={{ display:"flex", alignItems:"center", height:32, border:"1px solid var(--input)", borderRadius:"var(--radius-lg)", overflow:"hidden" }}>
             <span style={{ padding:"0 8px 0 10px", color:"var(--muted-foreground)", fontFamily:"var(--font-mono)", fontSize:13, background:"var(--muted)", height:"100%", display:"flex", alignItems:"center", borderRight:"1px solid var(--input)" }}>/@</span>
-            <input defaultValue="gabi" style={{ border:0, outline:"none", flex:1, padding:"0 10px", fontFamily:"var(--font-sans)", fontSize:14, background:"transparent", color:"var(--foreground)" }} />
+            <input defaultValue="alexandra" style={{ border:0, outline:"none", flex:1, padding:"0 10px", fontFamily:"var(--font-sans)", fontSize:14, background:"transparent", color:"var(--foreground)" }} />
           </div>
         </div>
         <Button style={{ width:"100%", marginTop:4 }} onClick={() => go("success")}>Create account</Button>

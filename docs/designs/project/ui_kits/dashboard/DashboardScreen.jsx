@@ -5,7 +5,7 @@ function DashboardScreen({ NS }) {
   return (
     <div style={{ padding: 24, maxWidth: 1120, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
-        <h1 style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 24, letterSpacing: "-0.02em", margin: 0 }}>Welcome back, Gabi</h1>
+        <h1 style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 24, letterSpacing: "-0.02em", margin: 0 }}>Welcome back, Alexandra</h1>
         <p style={{ color: "var(--muted-foreground)", fontSize: 14, margin: "4px 0 0" }}>Here's how your storefront is doing.</p>
       </div>
 

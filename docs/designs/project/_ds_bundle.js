@@ -779,7 +779,7 @@ function DashboardScreen({
       letterSpacing: "-0.02em",
       margin: 0
     }
-  }, "Welcome back, Gabi"), /*#__PURE__*/React.createElement("p", {
+  }, "Welcome back, Alexandra"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: "var(--muted-foreground)",
       fontSize: 14,
@@ -1458,10 +1458,10 @@ try { (() => {
 // Mock data for the Creator Commerce dashboard UI kit.
 window.CC_DATA = {
   user: {
-    name: "Gabi Ionescu",
-    handle: "@gabi",
-    email: "gabi@example.com",
-    initials: "GI"
+    name: "Alexandra",
+    handle: "@alexandra",
+    email: "alexandra@example.com",
+    initials: "AB"
   },
   kpis: [{
     label: "Revenue",
@@ -1494,7 +1494,7 @@ window.CC_DATA = {
   }, {
     done: true,
     label: "Claim your handle",
-    sub: "creatorcommerce.com/@gabi"
+    sub: "creatorcommerce.com/@alexandra"
   }, {
     done: true,
     label: "Publish your first product"

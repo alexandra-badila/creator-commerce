@@ -16,7 +16,7 @@ export const kpis = [
 
 export const checklist = [
   { done: true, label: "Create your account" },
-  { done: true, label: "Claim your handle", sub: "creatorcommerce.com/@gabi" },
+  { done: true, label: "Claim your handle", sub: "creatorcommerce.com/@alexandra" },
   { done: true, label: "Publish your first product" },
   { done: false, label: "Connect Stripe to get paid" },
   { done: false, label: "Share your storefront link" },

@@ -91,7 +91,7 @@ export default function LandingPage() {
           <Button size="lg" nativeButton={false} render={<Link href="/signup" />}>
             Start selling free <ArrowRight />
           </Button>
-          <Button size="lg" variant="outline" nativeButton={false} render={<Link href="/@gabi" />}>
+          <Button size="lg" variant="outline" nativeButton={false} render={<Link href="/@alexandra" />}>
             See a storefront
           </Button>
         </div>
@@ -107,7 +107,7 @@ export default function LandingPage() {
             <span className="size-2.5 rounded-full bg-chart-1" />
             <span className="size-2.5 rounded-full bg-chart-1" />
             <span className="ml-3 font-mono text-xs text-muted-foreground">
-              creatorcommerce.com/@gabi
+              creatorcommerce.com/@alexandra
             </span>
           </div>
           <div className="grid grid-cols-3 gap-4 p-6">

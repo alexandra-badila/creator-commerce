@@ -50,7 +50,7 @@ export function SignupForm({ next }: { next: string }) {
             id="name"
             name="name"
             autoComplete="name"
-            placeholder="Gabi Ionescu"
+            placeholder="Alexandra"
             required
           />
         </div>
@@ -70,7 +70,7 @@ export function SignupForm({ next }: { next: string }) {
           <Input
             id="handle"
             name="handle"
-            placeholder="gabi"
+            placeholder="alexandra"
             pattern="[a-z0-9_-]{3,30}"
             title="3–30 characters: lowercase letters, numbers, hyphens or underscores."
             required
