@@ -7,6 +7,7 @@
     "schema:migrations:generate": "npx drizzle-kit generate",
     "schema:migrations:run": "npx drizzle-kit migrate",
     "cleanup:images": "tsx --conditions=react-server --env-file=.env scripts/cleanup-orphaned-images.ts",
+    "seed:products": "tsx --conditions=react-server --env-file=.env scripts/seed-products.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
