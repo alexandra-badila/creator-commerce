@@ -1,5 +1,45 @@
 # TODO
 
+## Deploy
+
+- **Stripe is not configured for live purchases in production.** Production
+  needs Stripe's **live-mode** credentials, not the test-mode ones used in dev:
+  - A live-mode webhook endpoint at
+    `https://<production host>/api/stripe/webhook`, subscribed to
+    `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+    `checkout.session.expired` and `checkout.session.async_payment_failed` — the
+    four cases `lib/server/request/stripe-webhook.ts` switches on.
+  - The live `STRIPE_SECRET_KEY` and that endpoint's signing secret as
+    `STRIPE_WEBHOOK_SECRET`, both on the Production environment only, then a
+    redeploy. Test and live endpoints have different signing secrets, and
+    neither is the one `stripe listen` prints.
+  - Verify with one real low-price purchase: the endpoint's delivery log in the
+    Stripe dashboard shows a 200, the purchase row is `paid`, and the receipt
+    arrives. Refund it from the dashboard afterwards (nothing in the app can —
+    see Purchases below).
+
+  Until the webhook is in place, `/checkout/return` still fulfils a buyer who
+  lands back on the site, but a buyer whose browser dies after paying is never
+  fulfilled, and expired sessions leave their `pending` rows behind.
+
+- **PostHog receives no analytics from the Vercel deployments. (Human to
+  debug.)** The purchase funnel — `storefront_viewed` / `product_viewed` /
+  `product_added_to_cart` → `checkout_started` → `purchase_completed` — works
+  locally but nothing arrives from preview or production, so the dashboard's
+  Conversion card has no data there. Places to look, roughly in order:
+  - The four PostHog variables are set on the environment being tested
+    (`NEXT_PUBLIC_POSTHOG_HOST` is needed by both halves).
+  - `NEXT_PUBLIC_*` is inlined at **build** time: a variable added after the
+    last deploy is absent from the bundle until a redeploy. Check the built JS
+    for the key.
+  - `NEXT_PUBLIC_POSTHOG_HOST` matches the project's region (US vs EU).
+  - Browser devtools on the deployed site: are requests to the PostHog host
+    being made at all, and what do they return? An ad blocker drops them
+    silently.
+  - Server side: `purchase_completed` is sent from `after()` via
+    `scheduleAnalytics` — check the Vercel function logs for a failed capture,
+    and whether the function is frozen before the flush completes.
+
 ## Product images
 
 - **No optimistic thumbnails while an image uploads.** The tile appears only
@@ -78,23 +118,8 @@
 ## Image optimization
 
 Baseline is already in place: no raw `<img>` anywhere, `remotePatterns` set for
-UploadThing, every `Image` uses `fill` + `sizes` + `alt`. What is left:
-
-- **`priority` is deprecated in Next 16 — migrate to the explicit props.**
-  `ProductGallery` passes `priority={index === 0}`
-  (`components/product-gallery.tsx`) and `ProductCover` accepts a `priority`
-  prop (`components/product-card.tsx`). Next 16 deprecated `priority` in favour
-  of `preload`, and the docs recommend `loading="eager"` / `fetchPriority="high"`
-  over `preload` in most cases. The gallery's first slide is the product page's
-  LCP element, so `loading="eager"` + `fetchPriority="high"` is the right
-  replacement; `preload` only if we want the `<link>` in `<head>`.
-
-- **The storefront grid has no eager image at all, so its LCP lazy-loads.**
-  `ProductCover` takes a `priority` prop but `ProductCard` never forwards it and
-  the storefront page never sets it, so every card image is lazy — including the
-  one that decides LCP. Forward the prop and set it on the first card (or first
-  row). While there: the `sizes` prop on `ProductCover` is likewise never
-  overridden by any caller, so either wire it up or drop both.
+UploadThing, every `Image` uses `fill` + `sizes` + `alt`, and the first card of
+each grid and the gallery's first slide `preload`. What is left:
 
 - **`sizes` describes a responsive layout we do not have.**
   The storefront grid is `grid-cols-3` with no breakpoint and the product page is
@@ -103,21 +128,17 @@ UploadThing, every `Image` uses `fill` + `sizes` + `alt`. What is left:
   620px`, so on a phone the browser fetches a full-viewport variant for a ~117px
   card. The desktop numbers are off too — the real gallery width is ~545px, not
   620px. Either make the grids responsive so the `100vw` branch becomes true, or
-  correct the `sizes` values to the widths actually rendered.
+  correct the `sizes` values to the widths actually rendered. While there: the
+  `sizes` prop on `ProductCover` is never overridden by any caller, so either
+  wire it up or drop it.
 
 - **No blur placeholder on remote images.**
   `placeholder="blur"` needs a `blurDataURL`, which is not derived automatically
   for remote URLs. A single shared solid-colour data URL for product covers and
   gallery slides is enough to remove the flash of empty frame.
 
-- **Every image knob in `next.config.ts` is still at its default.**
-  In rough order of payoff:
-  - `minimumCacheTTL` defaults to 4 hours; UploadThing keys are immutable, so we
-    re-optimize the same bytes several times a day for nothing. `2678400` (31d).
-  - `formats` defaults to `['image/webp']` only — AVIF is not being served
-    despite what we claim. `['image/avif', 'image/webp']` costs ~50% more encode
-    time on the first request and double the cache storage for ~20% smaller
-    files.
+- **Remaining image knobs in `next.config.ts`.** `formats` (AVIF) and
+  `minimumCacheTTL` (31d) are set; these are still at their defaults:
   - `remotePatterns` omits `pathname` and `search`, which implies `**` for both.
     UploadThing serves `/f/<key>`, so `pathname: '/f/**'` and `search: ''` close
     the gap the docs warn about.
@@ -183,14 +204,22 @@ ordered by `createdAt`, top 50, no pagination. Three known limits:
 
 ## Purchases
 
-- **Dashboard KPIs are still mock.** Revenue, Units sold and Products could all
-  be derived now (`getSellerTotals` already computes the first two), but
-  Conversion has no data source anywhere — there is no pageview or analytics
-  table. Deriving three of four and leaving one fabricated would be worse than
-  the current honest placeholder, so this waits on a decision about Conversion.
+- **Conversion's denominator is measured client-side and can be blocked.** The
+  denominator is any of `storefront_viewed`, `product_viewed` or
+  `product_added_to_cart` — whichever event the visitor's actual entry point
+  produces first, since `/explore` and shared product links reach a product
+  page directly and skip the storefront — captured in the browser, while the
+  numerator `purchase_completed` is captured on the server and cannot be
+  blocked. A visitor running an ad blocker who buys is therefore in the
+  numerator and not the denominator, and the rate reads a little high. It is
+  clamped to 100% as a safety net.
 
-- **No receipts.** The `/purchases` receipt column was removed rather than left
-  as a dead link. It comes back with Stripe, which is what would generate them.
+  The fix, if the number ever looks implausible against Stripe's session
+  count, is a first-party ingest proxy — rewriting `/ingest/*` to PostHog's
+  ingest and assets hosts so blockers see no third-party domain. It was
+  considered and dropped when the feature was designed: it costs two rewrite
+  rules, puts ingest traffic on this app's own domain, and makes GeoIP depend
+  on `X-Forwarded-For` surviving the rewrite.
 
 - **Refunds have no path.** `purchaseStatus` includes `'refunded'` and both the
   unique index and `getPurchasedProductIds` respect it, but nothing can set it
@@ -226,7 +255,7 @@ ordered by `createdAt`, top 50, no pagination. Three known limits:
 
 - **Double-pay is possible, and only logged.** Two checkouts started in parallel
   for the same product create two sessions; paying both leaves one line that needs
-  a manual refund. `fulfillCheckoutSession` catches the unique violation and
+  a manual refund. `fulfillCheckoutSession` (`lib/server/checkout.ts`) catches the unique violation and
   `console.error`s the session id rather than failing the webhook. Fixing it
   properly means expiring a buyer's outstanding open sessions that overlap the new
   cart before creating another. Note the trap: do **not** fix it by deleting old
@@ -234,6 +263,30 @@ ordered by `createdAt`, top 50, no pagination. Three known limits:
   webhook would then find nothing to promote, turning a refundable duplicate into
   a payment with no record at all.
 
+  The receipt is downstream of this and inherits both failure modes. The
+  unique-violation branch in `fulfillCheckoutSession` returns `[]` before any
+  receipt is sent, so a buyer charged for a duplicate gets no receipt at all —
+  on top of needing the manual refund. And because `markCheckoutSessionPaid` can
+  promote a subset of a session's rows, a receipt that does go out can list
+  fewer items and a smaller total than the buyer was actually charged. Whoever
+  fixes double-pay needs to carry the receipt fix along with it.
+
+
+## Notifications
+
+- **Every `@react-email/*` package is marked deprecated in the lockfile.**
+  `npm ls` shows `"deprecated": "Package no longer supported."` on all of them,
+  `@react-email/components@1.0.12` included. It still works today, and this
+  reads as a registry-wide deprecation across the scope rather than a broken
+  package, but nobody has established what replaces it. Someone should, before
+  the templates grow enough to make a migration expensive.
+
+- **`from` is a personal Gmail address, signed with Google's DKIM.** Sending goes
+  through nodemailer with a Gmail App Password (`SMTP_USER` / `SMTP_PASS`), which
+  is free, delivers to any address and caps around 500/day. What it costs is
+  provenance: the mail is from a person, not from the product. A domain with its
+  own DKIM is what replaces it, and the swap is one file because every caller
+  goes through `sendEmail`.
 
 ## UX debt
 - Currently buying and selling are kind of a hodge podge in the dashboard layout / sidebar nav. We probably want to have buying and selling as major pieces in the UI so that users that only do one and not the other can have a more tailored experience with dedicated dashboards for each.
@@ -241,3 +294,31 @@ ordered by `createdAt`, top 50, no pagination. Three known limits:
 - Quite a few buttons with bad state / mock data
   - sign in buttons
   - dead links
+
+## Email
+
+- **Settings notification preferences are a mockup.** The toggles on
+  `/settings` are a hardcoded `NOTIFICATIONS` array with no persistence.
+  Honouring them means a column, a migration, an action, and a check inside
+  `sendOrderEmails`. Transactional mail currently sends unconditionally.
+
+- **`requireEmailVerification` is off.** Every existing row has
+  `emailVerified: false`, so turning it on locks out every account. It needs a
+  backfill or a grace period first. The banner is the only nudge until then.
+
+- **Email change from Settings is unwired.** Better Auth's `changeEmail` and
+  `sendChangeEmailVerification` are untouched. Now cheap — the handler and the
+  template pattern both exist.
+
+- **Still no outbox.** A send that fails is logged and lost. `scheduleEmail`
+  (`lib/server/request/background.ts`) catches the failure rather than letting
+  it escape the task passed to `after()`, but that catch is not what protects the
+  webhook — `after()` already runs past the response and Next catches whatever a
+  task throws itself, so nothing here can turn into a 500 either way. What the
+  catch buys is a log line naming the order, in place of Next's bare "A promise
+  passed to `after()` rejected". Swallowing there and just logging is the same
+  trade already made for `deleteUploadedFiles` — the operation the user cares
+  about succeeded, and failing it because a side effect failed would be worse.
+  Retries, and a record of what was sent, remain the fix; it also answers Gmail's
+  1-3s SMTP handshake happening inside a webhook Stripe is timing, so it is one
+  piece of work, not two.

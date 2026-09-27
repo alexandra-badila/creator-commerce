@@ -3,6 +3,7 @@ import 'server-only'
 import type Stripe from 'stripe'
 
 import { APP_CURRENCY } from '@/lib/currency'
+import { appUrl } from '@/lib/server/app-url'
 import {
   deletePendingCheckoutSession,
   markCheckoutSessionPaid,
@@ -17,13 +18,15 @@ import { stripe } from '@/lib/server/stripe'
  * Its own module rather than living in lib/actions/cart.ts because two entry
  * points need the same fulfilment: the browser coming back from Stripe
  * (app/checkout/return/route.ts) and Stripe's own webhook
- * (app/api/stripe/webhook/route.ts). Whichever arrives first does the work.
+ * (lib/server/request/stripe-webhook.ts). Whichever arrives first does the work.
+ * Both reach it through fulfillAndNotify, which adds the mail this module
+ * deliberately does not send.
  *
  * The layering, deliberately: route handlers and actions own request state —
  * cookies, redirects, revalidation — this module owns Stripe and sequencing, and
- * the DAL owns SQL. Nothing here reads headers() or cookies() or redirects, which
- * is what makes it callable from the webhook, where there is no browser and no
- * request context to read.
+ * the DAL owns SQL. Nothing here reads headers() or cookies() or redirects, and
+ * nothing here calls after() — which is what keeps it callable from a script
+ * with no request scope, not merely from the webhook.
  */
 
 // Stripe's minimum, and the shortest we can make an abandoned checkout give up
@@ -73,13 +76,36 @@ export async function createCheckoutSession(params: {
       expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
       // The literal {CHECKOUT_SESSION_ID} is Stripe's placeholder and must not be
       // interpolated — Stripe substitutes it when it builds the redirect.
-      success_url: `${process.env.APP_URL!}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${appUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
       // Straight back to the cart, which is still intact: nothing is cleared
       // until a payment is confirmed.
-      cancel_url: `${process.env.APP_URL!}/cart`,
+      cancel_url: `${appUrl}/cart`,
     },
     { idempotencyKey: orderId },
   )
+}
+
+/**
+ * Sweeps a session's leftover pending rows without letting the sweep itself
+ * fail the caller.
+ *
+ * Both call sites in fulfillCheckoutSession reach this after the session's rows
+ * are already promoted (or, on the duplicate-purchase path, already owned
+ * through another session) — a throw here would 500 the webhook for a session
+ * whose real work is done, buying nothing but the pointless Stripe retries the
+ * comments in this file already argue against. Losing the sweep only leaves a
+ * dead pending row behind; the NOT EXISTS guard in markCheckoutSessionPaid means
+ * that row can never be re-promoted.
+ */
+async function sweepPendingRows(sessionId: string): Promise<void> {
+  try {
+    await deletePendingCheckoutSession(sessionId)
+  } catch (error) {
+    console.error(
+      `[checkout] sweep failed for session ${sessionId} — dead pending rows left behind`,
+      error,
+    )
+  }
 }
 
 /**
@@ -119,73 +145,13 @@ export async function fulfillCheckoutSession(
     console.error(
       `[checkout] duplicate purchase in session ${session.id} — the buyer paid for something they already own and needs a refund for that line`,
     )
-    await deletePendingCheckoutSession(session.id)
+    await sweepPendingRows(session.id)
     return []
   }
 
-  await deletePendingCheckoutSession(session.id)
+  await sweepPendingRows(session.id)
+
   return promoted
-}
-
-/**
- * Stripe's side of the flow. Mounted at app/api/stripe/webhook/route.ts.
- *
- * Status codes are the contract here, not decoration: 400 tells Stripe the
- * request was never valid, 500 asks it to retry with backoff, and 200 means done
- * — including for events we do not handle, since anything else marks the endpoint
- * as failing in the dashboard.
- */
-export async function handleStripeWebhook(request: Request): Promise<Response> {
-  // Before anything else, and text() rather than json(): the signature covers the
-  // raw bytes, so re-serialising a parsed body would invalidate it.
-  const body = await request.text()
-  const signature = request.headers.get('stripe-signature')
-
-  if (!signature) {
-    return new Response('Missing stripe-signature header', { status: 400 })
-  }
-
-  let event: Stripe.Event
-  try {
-    event = await stripe.webhooks.constructEventAsync(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET!,
-    )
-  } catch (error) {
-    // A 400 here means the secret is wrong or the request is forged. Stripe will
-    // retry and keep failing, which is the point — this should be loud rather
-    // than silently swallowed with a 200.
-    const message = error instanceof Error ? error.message : 'Invalid signature'
-    console.error(`[checkout] webhook signature rejected: ${message}`)
-    return new Response('Invalid signature', { status: 400 })
-  }
-
-  // log event type
-  console.log('stripe event:', event.type)
-
-  // Anything thrown past here is left to propagate: a database failure should
-  // become a 500 so Stripe retries, rather than a 200 that loses the order.
-  switch (event.type) {
-    case 'checkout.session.completed':
-    case 'checkout.session.async_payment_succeeded': {
-      const session = event.data.object
-      // 'completed' fires for delayed payment methods too, where the session is
-      // done but the money is not in yet. That case is finished later by
-      // async_payment_succeeded.
-      if (session.payment_status !== 'unpaid') {
-        await fulfillCheckoutSession(session)
-      }
-      break
-    }
-    case 'checkout.session.expired':
-    case 'checkout.session.async_payment_failed': {
-      await deletePendingCheckoutSession(event.data.object.id)
-      break
-    }
-  }
-
-  return Response.json({ received: true })
 }
 
 /**

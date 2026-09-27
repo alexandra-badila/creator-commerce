@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, asc, desc, eq, ilike, inArray, isNull, ne, or } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
 
 import {
   EXPLORE_RESULT_LIMIT,
@@ -322,6 +322,58 @@ export async function discardStagedImages(
   return rows.map((row) => row.key)
 }
 
+export type OrphanedImageUpload = {
+  id: number
+  key: string
+  url: string
+  ownerId: string
+  createdAt: Date
+}
+
+/**
+ * Staged images older than `cutoff` that no product uses — what an abandoned
+ * form leaves behind (a closed tab, a browser Back, an ended session).
+ *
+ * A claimed upload has no row left, so age alone finds the candidates. The
+ * `not exists` is the backstop for a row whose url is live anyway — a commit
+ * that wrote the array but did not get as far as deleting its rows.
+ */
+export async function findOrphanedImageUploads(
+  cutoff: Date,
+): Promise<OrphanedImageUpload[]> {
+  return db
+    .select({
+      id: productImageUploadsTable.id,
+      key: productImageUploadsTable.key,
+      url: productImageUploadsTable.url,
+      ownerId: productImageUploadsTable.ownerId,
+      createdAt: productImageUploadsTable.createdAt,
+    })
+    .from(productImageUploadsTable)
+    .where(
+      and(
+        lt(productImageUploadsTable.createdAt, cutoff),
+        // Correlated on the outer row's url.
+        sql`not exists (
+          select 1 from ${productsTable}
+          where ${productsTable.images} @> array[${productImageUploadsTable.url}]::text[]
+        )`,
+      ),
+    )
+}
+
+/**
+ * Deletes staging rows by id. Only the sweep calls this, and only after the
+ * rows' files are gone from storage — see sweepOrphanedImages.
+ */
+export async function deleteImageUploadRows(ids: number[]): Promise<void> {
+  if (ids.length === 0) return
+
+  await db
+    .delete(productImageUploadsTable)
+    .where(inArray(productImageUploadsTable.id, ids))
+}
+
 // Only what the storefront grid's ProductCard renders (see ProductCardProduct
 // in components/product-card.tsx, which this type must stay assignable to).
 // fileKey, fileName and fileSizeBytes describe the product's file, which is
@@ -334,12 +386,31 @@ export type StorefrontProduct = {
   description: string | null
   priceInCents: number
   images: string[]
+  // Selected so the owner's own view can mark drafts. A visitor only ever sees
+  // 'published' here, because that is the only status their read returns.
+  status: ProductStatus
 }
 
-// Storefront read: everything a seller has published, oldest first. Scoped by
-// owner and status so drafts and soft-deleted rows never reach a public page.
-export async function getPublishedProducts(
+/**
+ * Storefront grid read: a seller's catalogue, scoped to that seller.
+ *
+ * `includeDrafts` is required rather than optional, so a call site that forgets
+ * it fails to compile instead of quietly leaking. It belongs to the caller
+ * because the caller is the one that resolves the session — this module never
+ * reads request state. Only the storefront page passes true, and only when the
+ * viewer is the owner.
+ *
+ * The tombstone filter sits outside that conditional: a soft-deleted product is
+ * not a draft, and nothing makes it previewable.
+ *
+ * Explicitly ordered because the owner's read and a visitor's read have
+ * different WHERE clauses — without an explicit order the two can come back in
+ * different orders, and the owner's preview stops matching the shelf a buyer
+ * sees. `id` breaks ties `createdAt` leaves unordered.
+ */
+export async function getStorefrontProducts(
   ownerId: string,
+  { includeDrafts }: { includeDrafts: boolean },
 ): Promise<StorefrontProduct[]> {
   return db
     .select({
@@ -349,15 +420,18 @@ export async function getPublishedProducts(
       description: productsTable.description,
       priceInCents: productsTable.priceInCents,
       images: productsTable.images,
+      status: productsTable.status,
     })
     .from(productsTable)
     .where(
       and(
         eq(productsTable.ownerId, ownerId),
-        eq(productsTable.status, 'published'),
+        // `and()` drops undefined entries, so no filter needs no special case.
+        includeDrafts ? undefined : eq(productsTable.status, 'published'),
         isNull(productsTable.deletedAt),
       ),
     )
+    .orderBy(asc(productsTable.createdAt), asc(productsTable.id))
 }
 
 // Only what the single product page renders. No slug: that page links back to
@@ -370,13 +444,18 @@ export type StorefrontProductDetail = {
   description: string | null
   priceInCents: number
   images: string[]
+  status: ProductStatus
 }
 
-// Public product page read. Takes the ownerId resolved from the URL's handle so
-// a product can only be reached under the seller that actually owns it.
-export async function getPublishedProduct(
+// Product page read. Takes the ownerId resolved from the URL's handle so a
+// product can only be reached under the seller that actually owns it, and
+// `includeDrafts` for the same reason getStorefrontProducts does — the page
+// passes true only when the viewer is that seller, so a draft's URL stays a 404
+// for everyone else and guessing the id does not help.
+export async function getStorefrontProduct(
   id: number,
   ownerId: string,
+  { includeDrafts }: { includeDrafts: boolean },
 ): Promise<StorefrontProductDetail | null> {
   const [product] = await db
     .select({
@@ -385,13 +464,14 @@ export async function getPublishedProduct(
       description: productsTable.description,
       priceInCents: productsTable.priceInCents,
       images: productsTable.images,
+      status: productsTable.status,
     })
     .from(productsTable)
     .where(
       and(
         eq(productsTable.id, id),
         eq(productsTable.ownerId, ownerId),
-        eq(productsTable.status, 'published'),
+        includeDrafts ? undefined : eq(productsTable.status, 'published'),
         isNull(productsTable.deletedAt),
       ),
     )
@@ -401,7 +481,8 @@ export async function getPublishedProduct(
 }
 
 // Only the fields the explore grid renders, plus the seller identity its links
-// need. `owner_id` and `updated_at` have no business on a cross-seller list.
+// need. `updated_at` has no business on a cross-seller list; `sellerId` does,
+// below, for funnel attribution.
 export type ExploreProduct = {
   id: number
   slug: string
@@ -410,6 +491,9 @@ export type ExploreProduct = {
   priceInCents: number
   images: string[]
   createdAt: Date
+  // The owner id alongside the public identity, so a cross-seller grid can
+  // attribute an add-to-cart to the right storefront's funnel.
+  sellerId: string
   sellerHandle: string
   sellerName: string
 }
@@ -465,6 +549,7 @@ export async function searchPublishedProducts({
       priceInCents: productsTable.priceInCents,
       images: productsTable.images,
       createdAt: productsTable.createdAt,
+      sellerId: user.id,
       sellerHandle: user.handle,
       sellerName: user.name,
     })
@@ -585,4 +670,41 @@ export async function getUserProduct(
     .limit(1)
 
   return product ?? null
+}
+
+export type SellerProductCounts = {
+  published: number
+  drafts: number
+}
+
+/**
+ * How many products the owner has live, and how many are still drafts.
+ *
+ * The two counts do not overlap — `status` is one or the other — so the
+ * dashboard can print the published figure as the headline and the drafts as a
+ * separate line without either double-counting the other.
+ *
+ * Soft-deleted rows are excluded, the same as every other read of this table.
+ * One scan of products_ownerId_idx rather than two count queries.
+ */
+export async function getSellerProductCounts(
+  ownerId: string,
+): Promise<SellerProductCounts> {
+  const [row] = await db
+    .select({
+      published:
+        sql<number>`count(*) filter (where ${eq(productsTable.status, 'published')})`.mapWith(
+          Number,
+        ),
+      drafts:
+        sql<number>`count(*) filter (where ${eq(productsTable.status, 'draft')})`.mapWith(
+          Number,
+        ),
+    })
+    .from(productsTable)
+    .where(
+      and(eq(productsTable.ownerId, ownerId), isNull(productsTable.deletedAt)),
+    )
+
+  return { published: row?.published ?? 0, drafts: row?.drafts ?? 0 }
 }

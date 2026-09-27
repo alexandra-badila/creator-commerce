@@ -9,9 +9,9 @@ import {
   exploreSort,
   type ExploreSort,
 } from "@/lib/schemas/explore"
-import { readCartMembership } from "@/lib/server/cart"
+import { readCartMembership } from "@/lib/server/request/cart"
 import { searchPublishedProducts } from "@/lib/server/dal/products"
-import { requireUser } from "@/lib/server/session"
+import { requireUser } from "@/lib/server/request/session"
 import { ProductCard } from "@/components/product-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ExploreSearchInput } from "./explore-search-input"
@@ -106,7 +106,10 @@ async function ExploreResults({
             key={product.id}
             product={product}
             handle={product.sellerHandle}
+            sellerId={product.sellerId}
             inCart={inCart(product.id)}
+            // No isOwner: searchPublishedProducts already excludes the
+            // viewer's own products, so nothing here can ever be theirs.
             // Nothing above the grid but the header, so the first cover is the
             // LCP candidate.
             preload={index === 0}

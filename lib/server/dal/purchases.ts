@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, count, desc, eq, ne, notExists, sql, sum } from 'drizzle-orm'
+import { and, count, desc, eq, gte, lt, ne, notExists, sql, sum } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 
 import db from '@/lib/server/db'
@@ -248,6 +248,146 @@ export async function getSellerTotals(
     units: row?.units ?? 0,
     revenueInCents: row?.revenueInCents ?? 0,
   }
+}
+
+export type PeriodTotals = {
+  current: { units: number; revenueInCents: number }
+  previous: { units: number; revenueInCents: number }
+}
+
+/**
+ * Both halves of a period-over-period comparison, in one scan.
+ *
+ * `since` is the start of the current window and the end of the previous one;
+ * `previousSince` is the start of the previous. The caller supplies both rather
+ * than a day count, because a DAL function that reads the clock returns a
+ * different answer for the same arguments — and because the page hands the same
+ * `since` to getSellerTopProducts, so the two reads on one render cannot disagree
+ * about where the window starts.
+ *
+ * One query rather than two, and that is not only about round trips: a delta
+ * whose halves came from separate reads is comparing two different instants.
+ * FILTER splits the same scan in two, so both numbers are as of the same moment.
+ *
+ * The outer WHERE already floors everything at `previousSince`, so the previous
+ * window's filter needs an upper bound only. Serves
+ * purchases_sellerId_createdAt_idx.
+ *
+ * Paid only, matching getSellerTotals: pending money has not arrived and
+ * refunded money left again.
+ */
+export async function getSellerPeriodTotals(
+  sellerId: string,
+  window: { since: Date; previousSince: Date },
+): Promise<PeriodTotals> {
+  const inCurrent = gte(purchasesTable.createdAt, window.since)
+  const inPrevious = lt(purchasesTable.createdAt, window.since)
+
+  const [row] = await db
+    .select({
+      // The conditions are embedded as drizzle expressions rather than
+      // interpolated Dates, so the timestamp column's own encoder maps them.
+      currentUnits: sql<number>`count(*) filter (where ${inCurrent})`.mapWith(
+        Number,
+      ),
+      // coalesce because SUM over zero matching rows is NULL, which is the
+      // seller with no sales this window rather than a missing row.
+      currentRevenueInCents:
+        sql<number>`coalesce(sum(${purchasesTable.priceInCents}) filter (where ${inCurrent}), 0)`.mapWith(
+          Number,
+        ),
+      previousUnits: sql<number>`count(*) filter (where ${inPrevious})`.mapWith(
+        Number,
+      ),
+      previousRevenueInCents:
+        sql<number>`coalesce(sum(${purchasesTable.priceInCents}) filter (where ${inPrevious}), 0)`.mapWith(
+          Number,
+        ),
+    })
+    .from(purchasesTable)
+    .where(
+      and(
+        eq(purchasesTable.sellerId, sellerId),
+        eq(purchasesTable.status, 'paid'),
+        gte(purchasesTable.createdAt, window.previousSince),
+      ),
+    )
+
+  // An ungrouped aggregate always returns a row; the fallbacks are belt and
+  // braces for the destructure.
+  return {
+    current: {
+      units: row?.currentUnits ?? 0,
+      revenueInCents: row?.currentRevenueInCents ?? 0,
+    },
+    previous: {
+      units: row?.previousUnits ?? 0,
+      revenueInCents: row?.previousRevenueInCents ?? 0,
+    },
+  }
+}
+
+export type TopProduct = {
+  productId: number
+  name: string
+  revenueInCents: number
+}
+
+/**
+ * The seller's best-earning products, highest first. `since` omitted means all
+ * time.
+ *
+ * Two things here contradict the rest of this module on purpose.
+ *
+ * The name comes from the joined product, not from purchases.productName.
+ * Everywhere else the snapshot is the correct read — a seller editing a product
+ * must not rewrite what a buyer's history says they bought. This is the seller's
+ * own catalogue, where the opposite holds: they think in terms of the product
+ * they own, and grouping by snapshot would split one renamed product into two
+ * rows that are really the same thing.
+ *
+ * The join does not filter deletedAt. A retired product still earned that
+ * revenue, and hiding it would silently understate the ranking — the same
+ * reasoning getBuyerPurchases gives.
+ *
+ * The join is inner and provably safe: purchases.productId is
+ * onDelete: 'restrict', so the product cannot vanish under a purchase.
+ *
+ * No total is returned. Callers already hold one — the windowed card uses
+ * getSellerPeriodTotals().current.revenueInCents, the all-time card uses
+ * getSellerTotals().revenueInCents — and a total summed from the returned rows
+ * would make the top product 100% of itself.
+ */
+export async function getSellerTopProducts(
+  sellerId: string,
+  options: { since?: Date; limit: number },
+): Promise<TopProduct[]> {
+  // One expression, used as both the projection and the sort key, so the two
+  // cannot drift apart.
+  const revenueInCents = sum(purchasesTable.priceInCents).mapWith(Number)
+
+  return db
+    .select({
+      productId: productsTable.id,
+      name: productsTable.name,
+      revenueInCents,
+    })
+    .from(purchasesTable)
+    .innerJoin(productsTable, eq(productsTable.id, purchasesTable.productId))
+    .where(
+      // and() drops undefined, so an absent `since` simply widens this to all
+      // time rather than needing a second query shape.
+      and(
+        eq(purchasesTable.sellerId, sellerId),
+        eq(purchasesTable.status, 'paid'),
+        options.since
+          ? gte(purchasesTable.createdAt, options.since)
+          : undefined,
+      ),
+    )
+    .groupBy(productsTable.id, productsTable.name)
+    .orderBy(desc(revenueInCents))
+    .limit(options.limit)
 }
 
 /**
