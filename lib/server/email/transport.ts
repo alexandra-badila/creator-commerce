@@ -28,8 +28,10 @@ export const hasCredentials = Boolean(
   process.env.SMTP_USER && process.env.SMTP_PASS,
 )
 
+// || rather than ??: .env.example ships `EMAIL_FROM=`, and an empty string
+// would otherwise win over SMTP_USER and send with a blank From.
 export const emailFrom =
-  process.env.EMAIL_FROM ?? process.env.SMTP_USER ?? 'dev@localhost'
+  process.env.EMAIL_FROM || process.env.SMTP_USER || 'dev@localhost'
 
 export const transporter = hasCredentials
   ? nodemailer.createTransport({

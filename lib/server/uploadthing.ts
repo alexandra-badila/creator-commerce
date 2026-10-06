@@ -73,7 +73,14 @@ export const uploadRouter = {
       // Needs ACL overrides enabled for the app; without them this throws at
       // presign. That is the right failure — quietly falling back to
       // public-read is the one outcome we cannot have.
-      acl: 'private',
+      //
+      // Except under `next dev`: the free UploadThing tier rejects private
+      // files at ingest with a 400, so a dev app on it could not upload a
+      // product file at all. Any production build — previews included —
+      // still asks for private and fails closed.
+      ...(process.env.NODE_ENV === 'production'
+        ? { acl: 'private' as const }
+        : {}),
       // Defaults to 'inline', which renders a pdf or a txt in a tab rather than
       // downloading it. A cross-origin `<a download>` is ignored by browsers,
       // so this header is the only thing that makes the click a download.
