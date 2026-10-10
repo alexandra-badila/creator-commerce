@@ -6,7 +6,7 @@
 import * as Sentry from "@sentry/nextjs";
 
 Sentry.init({
-  dsn: "https://76ea4a8320e2176fa2919c4108096cb0@o4512136801615872.ingest.de.sentry.io/4512136824553552",
+  dsn: "https://e6cbb94e712bdd0d3fcb5b0fd0ea6732@o4512232213512192.ingest.de.sentry.io/4512232230551632",
 
   // Turns off collection of data that could identify users. Adjust per category:
   // https://docs.sentry.io/platforms/javascript/configuration/options/#dataCollection

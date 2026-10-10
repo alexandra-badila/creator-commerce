@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "Sentry": {
-      "url": "https://mcp.sentry.dev/mcp/creatorcommerce/creator-commerce",
+      "url": "https://mcp.sentry.dev/mcp/creator-commerce/creator-commerce",
       "type": "http"
     }
   }
