@@ -184,6 +184,16 @@ ordered by `createdAt`, top 50, no pagination. Three known limits:
 
 ## Tech debt
 
+- **Product files are public-read.** `productFile` in
+  `lib/server/uploadthing.ts` used to upload `acl: 'private'`, which the free
+  UploadThing tier rejects at ingest with a 400, so production could not upload
+  a product file at all. It now takes the app default. The download route still
+  redirects to a signed url, but the signature is no longer what protects the
+  file: a buyer can strip it and share a permanent link. The fix is a paid plan
+  plus "Allow Overriding ACL" and `acl: 'private'` again, or streaming the file
+  through `/downloads/[productId]` so its url never reaches the browser. Files
+  uploaded while this holds stay public after the switch.
+
 - **Extract `productStatus` enum out of the server DB schema.**
   `lib/schemas/product.ts` imports the runtime value `productStatus` from
   `lib/server/db/schemas/product.ts`. Since `createProductSchema` is imported by

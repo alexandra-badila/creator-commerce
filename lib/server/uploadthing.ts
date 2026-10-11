@@ -66,21 +66,14 @@ export const uploadRouter = {
     blob: {
       maxFileSize: '128MB',
       maxFileCount: 1,
-      // Paid content, so it must not be fetchable by url alone. Downloads go
-      // through /downloads/[productId], which checks entitlement and mints a
-      // short-lived signed url per click.
-      //
-      // Needs ACL overrides enabled for the app; without them this throws at
-      // presign. That is the right failure — quietly falling back to
-      // public-read is the one outcome we cannot have.
-      //
-      // Except under `next dev`: the free UploadThing tier rejects private
-      // files at ingest with a 400, so a dev app on it could not upload a
-      // product file at all. Any production build — previews included —
-      // still asks for private and fails closed.
-      ...(process.env.NODE_ENV === 'production'
-        ? { acl: 'private' as const }
-        : {}),
+      // Uploaded with the app's default ACL, public-read — not `acl: 'private'`.
+      // Private files are a paid UploadThing feature and the app is on the free
+      // tier, where ingest rejects a private upload with a 400, so no product
+      // file could be uploaded at all. The accepted cost: the download route
+      // redirects a buyer to the file's ufs.sh url, and with the signature
+      // stripped that url keeps working for anyone the buyer hands it to.
+      // Switching back is `acl: 'private'` here plus "Allow Overriding ACL" on
+      // a paid plan (TODO.md).
       // Defaults to 'inline', which renders a pdf or a txt in a tab rather than
       // downloading it. A cross-origin `<a download>` is ignored by browsers,
       // so this header is the only thing that makes the click a download.
@@ -187,7 +180,8 @@ export async function deleteUploadedFileKeys(keys: string[]) {
 }
 
 /**
- * A short-lived url for a private product file.
+ * A short-lived signed url for a product file. The file is public-read today
+ * (see productFile above), so the signature is not what protects it.
  *
  * `generateSignedURL`, not `getSignedURL`: it signs locally with the app secret
  * instead of calling UploadThing, and the fetching variant is deprecated in v8

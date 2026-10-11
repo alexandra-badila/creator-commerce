@@ -250,9 +250,12 @@ by default and needs `-- --delete` to act, and `-- --older-than=7d` overrides th
 24 hours. Both go through `lib/server/image-cleanup.ts`, which imports nothing
 from `request/` so the script can load it.
 
-They are separate tables because images upload `public-read` and product files
-upload `private`. One table would let an image's key be claimed as a product's
-`fileKey`, and the product would sell a publicly fetchable file.
+They are separate tables because an image's key must never be claimable as a
+product's `fileKey`: images are meant to be fetched by anyone, product files
+only through `/downloads/[productId]`. Today both upload `public-read` —
+private files are a paid UploadThing feature, and the free tier answers an
+`acl: 'private'` upload with a 400 at ingest — so a product file's ufs.sh url,
+once a buyer has it, works for anyone (TODO.md).
 
 Images commit on Save, on both the create and edit pages: the form owns the list
 and `setProductImages` writes it whole, having checked every url against the
