@@ -121,6 +121,13 @@ export function streamProductDescription({
     // A length cap and a cost cap at once: three short paragraphs fit well
     // inside it.
     maxOutputTokens: 600,
+    // Off, not the provider default. Qwen 3.7 Flash reasons by default and
+    // spent ~1,000 tokens thinking before its first word: 14s for a one-line
+    // text prompt, and past the route's 60s maxDuration once an image was
+    // attached — a FUNCTION_INVOCATION_TIMEOUT with nothing streamed. A
+    // three-paragraph description does not need it. With it off the first
+    // token arrives in ~1s, ~4s with an image.
+    reasoning: 'none',
     abortSignal,
     // Errors after the stream starts cannot become a status code — the 200 is
     // already sent. This is where they get reported instead.

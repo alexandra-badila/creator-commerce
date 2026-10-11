@@ -43,6 +43,9 @@ let firstTokenAt: number | null = null
 
 const result = streamText({
   model: MODEL,
+  // As in the app (lib/server/ai/product-description.ts): Qwen reasons by
+  // default and takes ~15s to its first token with it on.
+  reasoning: 'none',
   messages: [
     {
       role: 'user',
