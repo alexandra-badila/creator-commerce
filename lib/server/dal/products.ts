@@ -673,6 +673,52 @@ export async function searchPublishedProducts({
     .limit(EXPLORE_RESULT_LIMIT)
 }
 
+// What a landing-page preview card renders: a cover, a name, a price, and the
+// storefront url its link is built from.
+export type FeaturedProduct = {
+  id: number
+  slug: string
+  name: string
+  priceInCents: number
+  images: string[]
+  sellerHandle: string
+}
+
+/**
+ * The newest published products that have a cover image, for the signed-out
+ * landing page.
+ *
+ * Not owner-scoped, and safe for the same reason searchPublishedProducts is: it
+ * applies exactly the storefront's visibility rule, so nothing here is anything
+ * a signed-out visitor couldn't already see at /@handle. Products without an
+ * image are skipped rather than shown as a placeholder — the strip exists to
+ * show what the marketplace looks like.
+ */
+export async function getFeaturedProducts(
+  limit: number,
+): Promise<FeaturedProduct[]> {
+  return db
+    .select({
+      id: productsTable.id,
+      slug: productsTable.slug,
+      name: productsTable.name,
+      priceInCents: productsTable.priceInCents,
+      images: productsTable.images,
+      sellerHandle: user.handle,
+    })
+    .from(productsTable)
+    .innerJoin(user, eq(user.id, productsTable.ownerId))
+    .where(
+      and(
+        eq(productsTable.status, 'published'),
+        isNull(productsTable.deletedAt),
+        sql`cardinality(${productsTable.images}) > 0`,
+      ),
+    )
+    .orderBy(desc(productsTable.createdAt), desc(productsTable.id))
+    .limit(limit)
+}
+
 // Everything a cart line renders, plus the seller identity its link needs.
 // Narrower than ExploreProduct: a cart row is a thumbnail, a name and a price,
 // so description and createdAt have no business being fetched.

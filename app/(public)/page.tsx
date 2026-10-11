@@ -16,9 +16,20 @@ import {
 } from "lucide-react"
 
 import { MarketingShell } from "@/components/layouts/marketing-shell"
+import { ProductCover } from "@/components/product-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { formatPrice } from "@/lib/currency"
+import {
+  getFeaturedProducts,
+  type FeaturedProduct,
+} from "@/lib/server/dal/products"
+
+// Prerendered and regenerated at most every five minutes: the preview strip
+// reads the newest products, and nothing else on the page varies, so a
+// signed-out visitor still gets a static page rather than a database round trip.
+export const revalidate = 300
 
 export const metadata: Metadata = {
   title: "Creator Commerce — Sell your digital products",
@@ -65,13 +76,22 @@ const STEPS = [
   { n: "3", title: "Get paid", body: "Share your link and start selling." },
 ]
 
-const PREVIEW_PRODUCTS: { icon: LucideIcon; name: string; price: string; cover: string }[] = [
+// Fills the strip while the marketplace has fewer than three products with a
+// cover image — a fresh database renders the same strip the design shipped with.
+const PREVIEW_COUNT = 3
+const PLACEHOLDER_PRODUCTS: { icon: LucideIcon; name: string; price: string; cover: string }[] = [
   { icon: Package, name: "Presets", price: "$29", cover: "#e7e6df" },
   { icon: FileText, name: "Notion OS", price: "$19", cover: "#dfe4dc" },
   { icon: AudioLines, name: "Loops", price: "$12", cover: "#e5e2da" },
 ]
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const featured = await getFeaturedProducts(PREVIEW_COUNT)
+  const placeholders = PLACEHOLDER_PRODUCTS.slice(
+    0,
+    PREVIEW_COUNT - featured.length,
+  )
+
   return (
     <MarketingShell>
       {/* Hero */}
@@ -107,11 +127,14 @@ export default function LandingPage() {
             <span className="size-2.5 rounded-full bg-chart-1" />
             <span className="size-2.5 rounded-full bg-chart-1" />
             <span className="ml-3 font-mono text-xs text-muted-foreground">
-              creatorcommerce.com/@alexandra
+              creatorcommerce.com
             </span>
           </div>
           <div className="grid grid-cols-3 gap-4 p-6">
-            {PREVIEW_PRODUCTS.map(({ icon: Icon, name, price, cover }) => (
+            {featured.map((product) => (
+              <FeaturedProductCard key={product.id} product={product} />
+            ))}
+            {placeholders.map(({ icon: Icon, name, price, cover }) => (
               <div key={name} className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
                 <div
                   className="flex aspect-[3/2] items-center justify-center text-muted-foreground"
@@ -198,5 +221,27 @@ export default function LandingPage() {
         </div>
       </section>
     </MarketingShell>
+  )
+}
+
+function FeaturedProductCard({ product }: { product: FeaturedProduct }) {
+  return (
+    <Link
+      href={`/@${product.sellerHandle}/${product.id}/${product.slug}`}
+      className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 transition-shadow hover:ring-foreground/20"
+    >
+      <ProductCover
+        images={product.images}
+        alt={product.name}
+        sizes="(max-width: 1080px) 33vw, 340px"
+        preload
+      />
+      <div className="flex items-center justify-between gap-3 p-3.5 text-left">
+        <span className="truncate text-[13px] font-medium">{product.name}</span>
+        <span className="font-mono text-sm font-medium">
+          {formatPrice(product.priceInCents)}
+        </span>
+      </div>
+    </Link>
   )
 }
