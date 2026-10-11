@@ -66,6 +66,7 @@ export default defineConfig({
         // No real mail or analytics from a test run: absent SMTP credentials
         // fall back to nodemailer's jsonTransport (see CLAUDE.md "# Email"),
         // and an absent PostHog key means the SDK never initialises.
+        RESEND_API_KEY: '',
         SMTP_USER: '',
         SMTP_PASS: '',
         NEXT_PUBLIC_POSTHOG_KEY: '',

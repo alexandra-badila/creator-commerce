@@ -97,14 +97,18 @@ its own dark-mode inversion regardless.
 
 Sending goes through one choke point, `sendEmail` in `lib/server/email/send.ts`,
 over one nodemailer transporter picked at module load by
-`lib/server/email/transport.ts`:
+`lib/server/email/transport.ts`. Resend wins when its key is set, else Gmail:
 
+- `RESEND_API_KEY` — sent over Resend's SMTP relay (user `resend`, the key as
+  password), not its SDK. Resend sends only from a domain verified on the
+  account; with none, `EMAIL_FROM` falls back to `onboarding@resend.dev`, which
+  delivers to the Resend account owner's own address and to nobody else.
 - `SMTP_USER` — the Gmail address.
 - `SMTP_PASS` — a Google **App Password**; 2FA must be on for the account.
-- `EMAIL_FROM` — optional, defaults to `SMTP_USER`; Gmail rewrites `From` to the
-  authenticated `SMTP_USER` account unless the address given is a verified
-  alias on that account, so setting a domain address without adding it as an
-  alias fails silently rather than erroring.
+- `EMAIL_FROM` — optional; under Gmail it defaults to `SMTP_USER`, and Gmail
+  rewrites `From` to the authenticated `SMTP_USER` account unless the address
+  given is a verified alias on that account, so setting a domain address
+  without adding it as an alias fails silently rather than erroring.
 
 A paid order produces one receipt for the buyer and one notification per seller.
 `sendOrderEmails` in `lib/server/email/order.ts` groups the promoted purchase
@@ -128,7 +132,7 @@ set, and the banner in `DashboardShell` is the only thing that asks. Turning the
 gate on would lock out every existing row, all of which have
 `emailVerified: false`.
 
-Both credentials absent is a supported state, not a broken one: the transporter
+No credentials at all is a supported state, not a broken one: the transporter
 becomes nodemailer's `jsonTransport`, which builds the message without opening a
 socket, and `sendEmail` logs the headers and the plain-text body. So a fresh
 clone can exercise the whole path, and no dev machine sends real mail by
@@ -281,7 +285,7 @@ can check for:
 - **Environment variables**, per environment, from `.env.example`. Production:
   its own Neon `PG_CONNECTION_STRING`, a freshly generated `BETTER_AUTH_SECRET`,
   `STRIPE_SECRET_KEY`, the `STRIPE_WEBHOOK_SECRET` of the endpoint below,
-  `UPLOADTHING_TOKEN`, `SMTP_USER`/`SMTP_PASS`, `CRON_SECRET`, and the four
+  `UPLOADTHING_TOKEN`, `RESEND_API_KEY` (or `SMTP_USER`/`SMTP_PASS`), `CRON_SECRET`, and the four
   PostHog variables.
   Preview: the same names with the dev Neon string, and no
   `STRIPE_WEBHOOK_SECRET` — no endpoint points at a preview, and
@@ -358,7 +362,7 @@ Playwright's app server runs on port 3100 with its own build directory
 directory, so a `next dev` started by hand on port 3000 — using the default
 `.next` — can keep running alongside a test run: different port, different
 build directory, different database. That server's `env` also blanks
-`SMTP_USER`, `SMTP_PASS` and `NEXT_PUBLIC_POSTHOG_KEY`, so a test run never
+`RESEND_API_KEY`, `SMTP_USER`, `SMTP_PASS` and `NEXT_PUBLIC_POSTHOG_KEY`, so a test run never
 sends real mail (absent SMTP credentials fall back to nodemailer's
 `jsonTransport`, see "# Email" above) or real analytics events (an absent
 PostHog key means the SDK never initialises, see "# Analytics" above).
