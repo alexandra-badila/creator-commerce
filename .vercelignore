@@ -1,0 +1,5 @@
+# The CLI does not read .gitignore. Without this, `vercel deploy` uploads .env,
+# Next loads it at build and runtime, and APP_URL=http://localhost:3000 pins
+# production to localhost (lib/server/app-url.ts).
+.env*
+!.env.example
