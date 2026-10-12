@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ExternalLink } from "lucide-react"
+import { Compass, ExternalLink } from "lucide-react"
 
 import { requireUser } from "@/lib/server/request/session"
 import { storefrontPath } from "@/lib/paths"
@@ -65,6 +65,9 @@ export async function DashboardShell({
           <DashboardTopbarTitle />
           <div className="flex-1" />
           <CeceLauncher />
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/explore" />}>
+            <Compass /> <span className="max-sm:sr-only">Explore</span>
+          </Button>
           <CartBadge />
           <Button variant="outline" size="sm" nativeButton={false} render={<Link href={storefrontPath(user.handle)} />}>
             <ExternalLink /> <span className="max-sm:sr-only">View storefront</span>
