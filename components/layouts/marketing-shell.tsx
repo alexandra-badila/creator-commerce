@@ -13,12 +13,12 @@ export function MarketingShell({
   return (
     <>
       <header className="sticky top-0 z-10 border-b bg-background/85 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-[1080px] items-center gap-4 px-6 py-3.5">
-          <Link href="/" className="flex items-center gap-2.5">
+        <div className="mx-auto flex max-w-[1080px] items-center gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-3.5">
+          <Link href="/" className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <Logo size={28} />
-            <Wordmark className="text-[17px]" />
+            <Wordmark className="hidden text-[17px] min-[380px]:inline" />
           </Link>
-          <nav className="ml-6 flex gap-[22px] text-sm">
+          <nav className="ml-6 hidden gap-[22px] text-sm md:flex">
             <a href="#features" className="text-muted-foreground hover:text-foreground">
               Features
             </a>

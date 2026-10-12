@@ -95,19 +95,19 @@ export default async function LandingPage() {
   return (
     <MarketingShell>
       {/* Hero */}
-      <section className="mx-auto flex max-w-[1080px] flex-col items-center gap-[22px] px-6 pt-20 pb-14 text-center">
+      <section className="mx-auto flex max-w-[1080px] flex-col items-center gap-[22px] px-4 pt-12 pb-10 text-center sm:px-6 sm:pt-20 sm:pb-14">
         <Badge variant="secondary">
           <span className="size-1.5 rounded-full bg-primary" />
           Now with AI product pages
         </Badge>
-        <h1 className="max-w-[16ch] font-heading text-[52px] leading-[1.08] font-medium tracking-[-0.03em]">
+        <h1 className="max-w-[16ch] font-heading text-[38px] leading-[1.08] sm:text-[52px] font-medium tracking-[-0.03em]">
           Sell your digital products in minutes
         </h1>
-        <p className="max-w-[52ch] text-lg leading-relaxed text-muted-foreground">
+        <p className="max-w-[52ch] text-base leading-relaxed sm:text-lg text-muted-foreground">
           Creator Commerce gives every creator a storefront, Stripe checkout,
           and protected downloads — so you can focus on making, not fulfilling.
         </p>
-        <div className="mt-1 flex gap-3">
+        <div className="mt-1 flex flex-wrap justify-center gap-3">
           <Button size="lg" nativeButton={false} render={<Link href="/signup" />}>
             Start selling free <ArrowRight />
           </Button>
@@ -116,12 +116,12 @@ export default async function LandingPage() {
           </Button>
         </div>
         <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-          <Check className="size-3.5" />
+          <Check className="size-3.5 shrink-0" />
           No monthly fee to start · you keep what you earn
         </div>
 
         {/* Product preview strip */}
-        <div className="mt-8 w-full overflow-hidden rounded-3xl bg-card ring-1 ring-foreground/10">
+        <div className="mt-4 w-full overflow-hidden rounded-2xl sm:mt-8 sm:rounded-3xl bg-card ring-1 ring-foreground/10">
           <div className="flex h-[38px] items-center gap-1.5 border-b px-3.5">
             <span className="size-2.5 rounded-full bg-chart-1" />
             <span className="size-2.5 rounded-full bg-chart-1" />
@@ -130,7 +130,7 @@ export default async function LandingPage() {
               creatorcommerce.com
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-4 p-6">
+          <div className="grid grid-cols-3 gap-2 p-3 sm:gap-4 sm:p-6">
             {featured.map((product) => (
               <FeaturedProductCard key={product.id} product={product} />
             ))}
@@ -144,9 +144,9 @@ export default async function LandingPage() {
                 >
                   <Icon className="size-6" />
                 </div>
-                <div className="flex items-center justify-between p-3.5 text-left">
-                  <span className="text-[13px] font-medium">{name}</span>
-                  <span className="font-mono text-sm font-medium">{price}</span>
+                <div className="flex flex-col items-start gap-0.5 p-2.5 text-left sm:flex-row sm:items-center sm:justify-between sm:p-3.5">
+                  <span className="text-xs font-medium sm:text-[13px]">{name}</span>
+                  <span className="font-mono text-xs font-medium sm:text-sm">{price}</span>
                 </div>
               </div>
             ))}
@@ -156,14 +156,14 @@ export default async function LandingPage() {
 
       {/* Features */}
       <section id="features" className="border-y bg-muted">
-        <div className="mx-auto max-w-[1080px] px-6 py-16">
+        <div className="mx-auto max-w-[1080px] px-4 py-12 sm:px-6 sm:py-16">
           <p className="text-center text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
             Everything you need
           </p>
-          <h2 className="mt-2 mb-10 text-center font-heading text-[32px] font-medium tracking-[-0.02em]">
+          <h2 className="mt-2 mb-8 text-center font-heading text-[26px] sm:mb-10 sm:text-[32px] font-medium tracking-[-0.02em]">
             One tool from upload to payout
           </h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map(({ icon: Icon, title, body }) => (
               <Card key={title}>
                 <CardContent className="flex flex-col gap-2.5 p-5">
@@ -180,14 +180,14 @@ export default async function LandingPage() {
       </section>
 
       {/* How it works */}
-      <section id="how" className="mx-auto max-w-[1080px] px-6 py-16">
+      <section id="how" className="mx-auto max-w-[1080px] px-4 py-12 sm:px-6 sm:py-16">
         <p className="text-center text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
           How it works
         </p>
-        <h2 className="mt-2 mb-10 text-center font-heading text-[32px] font-medium tracking-[-0.02em]">
+        <h2 className="mt-2 mb-8 text-center font-heading text-[26px] sm:mb-10 sm:text-[32px] font-medium tracking-[-0.02em]">
           Live in three steps
         </h2>
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid gap-8 sm:grid-cols-3 sm:gap-6">
           {STEPS.map((step) => (
             <div key={step.n} className="flex flex-col gap-2">
               <span className="flex size-9 items-center justify-center rounded-full bg-primary font-mono font-semibold text-primary-foreground">
@@ -201,9 +201,9 @@ export default async function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="mx-auto mb-16 max-w-[1080px] px-6">
-        <div className="flex flex-col items-center gap-[18px] rounded-3xl bg-foreground px-8 py-13 text-center text-background">
-          <h2 className="font-heading text-[34px] font-medium tracking-[-0.02em]">
+      <section className="mx-auto mb-12 max-w-[1080px] px-4 sm:mb-16 sm:px-6">
+        <div className="flex flex-col items-center gap-[18px] rounded-3xl bg-foreground px-6 py-10 sm:px-8 sm:py-13 text-center text-background">
+          <h2 className="font-heading text-[28px] font-medium sm:text-[34px] tracking-[-0.02em]">
             Start selling today
           </h2>
           <p className="max-w-[46ch] text-background/70">
@@ -236,9 +236,9 @@ function FeaturedProductCard({ product }: { product: FeaturedProduct }) {
         sizes="(max-width: 1080px) 33vw, 340px"
         preload
       />
-      <div className="flex items-center justify-between gap-3 p-3.5 text-left">
-        <span className="truncate text-[13px] font-medium">{product.name}</span>
-        <span className="font-mono text-sm font-medium">
+      <div className="flex flex-col items-start gap-0.5 p-2.5 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:p-3.5">
+        <span className="w-full truncate text-xs font-medium sm:w-auto sm:text-[13px]">{product.name}</span>
+        <span className="font-mono text-xs font-medium whitespace-nowrap sm:text-sm">
           {formatPrice(product.priceInCents)}
         </span>
       </div>
