@@ -3,3 +3,14 @@
 # production to localhost (lib/server/app-url.ts).
 .env*
 !.env.example
+
+# Local build output and caches. Vercel builds from source, and these hold
+# webpack/turbopack cache packs over the CLI's 100 MB per-file upload limit.
+/.next/
+/.next-e2e/
+/node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/coverage/
+*.tsbuildinfo
