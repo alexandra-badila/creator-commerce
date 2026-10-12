@@ -8,11 +8,13 @@ import { getUser } from "@/lib/server/request/session"
 import { getCartProducts, type CartProduct } from "@/lib/server/dal/products"
 import { getPurchasedProductIds } from "@/lib/server/dal/purchases"
 import { TrackView } from "@/components/analytics/track-view"
+import { THUMBNAIL_QUALITY } from "@/components/image"
 import { ProductCover } from "@/components/product-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { formatPrice } from "@/lib/currency"
+import { productPath } from "@/lib/paths"
 import { groupCartBySeller, type SellerCartGroup } from "@/lib/analytics/cart"
 import { RemoveFromCartButton } from "./remove-from-cart-button"
 import { CheckoutButton } from "./checkout-button"
@@ -143,10 +145,11 @@ function CartLine({
         alt={product.name}
         className="w-24 shrink-0 overflow-hidden rounded-lg"
         sizes="96px"
+        quality={THUMBNAIL_QUALITY}
       />
       <div className="flex flex-1 flex-col gap-0.5">
         <Link
-          href={`/@${product.sellerHandle}/${product.id}/${product.slug}`}
+          href={productPath(product.sellerHandle, product.id, product.slug)}
           className="font-heading text-[15px] font-medium hover:underline"
         >
           {product.name}

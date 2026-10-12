@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, asc, desc, eq, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, exists, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
 
 import {
   EXPLORE_RESULT_LIMIT,
@@ -17,6 +17,7 @@ import {
   type Product,
   type ProductStatus,
 } from '@/lib/server/db/schemas/product'
+import { purchasesTable } from '@/lib/server/db/schemas/purchase'
 import { slugify } from '@/lib/utils'
 
 export type CreateProductInput = {
@@ -524,12 +525,14 @@ export async function getStorefrontProducts(
     .orderBy(asc(productsTable.createdAt), asc(productsTable.id))
 }
 
-// Only what the single product page renders. No slug: that page links back to
-// the storefront by handle alone and never needs its own. Same reasoning as
-// StorefrontProduct above for leaving the file columns out — a public product
-// page is exactly the page a stolen fileKey would be most useful on.
+// Only what the single product page renders, plus `slug`: the page redirects
+// any other spelling of its url to productPath(handle, id, slug), so it needs
+// the canonical slug to compare against. Same reasoning as StorefrontProduct
+// above for leaving the file columns out — a public product page is exactly
+// the page a stolen fileKey would be most useful on.
 export type StorefrontProductDetail = {
   id: number
+  slug: string
   name: string
   description: string | null
   priceInCents: number
@@ -550,6 +553,7 @@ export async function getStorefrontProduct(
   const [product] = await db
     .select({
       id: productsTable.id,
+      slug: productsTable.slug,
       name: productsTable.name,
       description: productsTable.description,
       priceInCents: productsTable.priceInCents,
@@ -568,6 +572,40 @@ export async function getStorefrontProduct(
     .limit(1)
 
   return product ?? null
+}
+
+export type SitemapProduct = {
+  id: number
+  slug: string
+  handle: string
+  images: string[]
+  updatedAt: Date
+}
+
+/**
+ * Every product a crawler may index: published, not deleted, with the handle
+ * its url is built from. Not scoped to an owner — the sitemap is the whole
+ * public catalogue, which is exactly what the storefront pages already show to
+ * anyone. Ordered by id so the file is stable between rebuilds.
+ */
+export async function listSitemapEntries(): Promise<SitemapProduct[]> {
+  return db
+    .select({
+      id: productsTable.id,
+      slug: productsTable.slug,
+      handle: user.handle,
+      images: productsTable.images,
+      updatedAt: productsTable.updatedAt,
+    })
+    .from(productsTable)
+    .innerJoin(user, eq(productsTable.ownerId, user.id))
+    .where(
+      and(
+        eq(productsTable.status, 'published'),
+        isNull(productsTable.deletedAt),
+      ),
+    )
+    .orderBy(asc(productsTable.id))
 }
 
 // Only the fields the explore grid renders, plus the seller identity its links
@@ -600,16 +638,16 @@ function escapeLikePattern(value: string) {
 }
 
 /**
- * Marketplace-wide product search, for the signed-in /explore page.
+ * Marketplace-wide product search, for the public /explore page.
  *
  * The one read in this module that is deliberately NOT owner-scoped. What makes
  * that safe is that it applies exactly the visibility rule the public storefront
  * does — `status = 'published'` and no tombstone — so nothing reachable here is
- * anything a signed-out visitor couldn't already see at /@handle. The auth gate
- * on the page decides who gets the feature, not what the query may return.
+ * anything a signed-out visitor couldn't already see at /@handle.
  *
- * `viewerId` excludes the caller's own products: a creator browsing the
- * marketplace is shopping, and their own catalogue is one nav item away.
+ * `viewerId`, when given, excludes the caller's own products: a creator browsing
+ * the marketplace is shopping, and their own catalogue is one nav item away.
+ * A signed-out visitor passes none and sees everything.
  *
  * A `query` shorter than MIN_EXPLORE_QUERY_LENGTH is treated as absent rather
  * than as a filter, so a half-typed box browses instead of matching '%a%'. The
@@ -620,7 +658,7 @@ export async function searchPublishedProducts({
   query,
   sort,
 }: {
-  viewerId: string
+  viewerId?: string
   query: string
   sort: ExploreSort
 }): Promise<ExploreProduct[]> {
@@ -651,7 +689,7 @@ export async function searchPublishedProducts({
       and(
         eq(productsTable.status, 'published'),
         isNull(productsTable.deletedAt),
-        ne(productsTable.ownerId, viewerId),
+        viewerId ? ne(productsTable.ownerId, viewerId) : undefined,
         // `and()` drops undefined entries, so no query is simply no clause.
         pattern
           ? or(
@@ -843,4 +881,49 @@ export async function getSellerProductCounts(
     )
 
   return { published: row?.published ?? 0, drafts: row?.drafts ?? 0 }
+}
+
+/**
+ * The cover image of each product the viewer may see, keyed by id — what the
+ * Cece panel's cards fetch, since tool outputs carry ids and never image urls.
+ *
+ * Visible means not deleted and one of: the viewer owns it (drafts included),
+ * it is published, or the viewer bought it — a product unpublished after the
+ * sale is still the thing in their purchase history. `ne('pending')` for the
+ * purchase matches getBuyerPurchases. An id that matches none of these is
+ * simply absent from the map, the same answer as an id that never existed.
+ */
+export async function getVisibleProductCovers(
+  viewerId: string,
+  ids: number[],
+): Promise<Map<number, string | null>> {
+  if (ids.length === 0) return new Map()
+
+  const rows = await db
+    .select({ id: productsTable.id, images: productsTable.images })
+    .from(productsTable)
+    .where(
+      and(
+        inArray(productsTable.id, ids),
+        isNull(productsTable.deletedAt),
+        or(
+          eq(productsTable.ownerId, viewerId),
+          eq(productsTable.status, 'published'),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(purchasesTable)
+              .where(
+                and(
+                  eq(purchasesTable.productId, productsTable.id),
+                  eq(purchasesTable.buyerId, viewerId),
+                  ne(purchasesTable.status, 'pending'),
+                ),
+              ),
+          ),
+        ),
+      ),
+    )
+
+  return new Map(rows.map((row) => [row.id, row.images[0] ?? null]))
 }

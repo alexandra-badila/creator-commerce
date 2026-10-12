@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
-import { cache } from "react"
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { notFound, permanentRedirect } from "next/navigation"
 import {
   ChevronLeft,
   Heart,
@@ -11,9 +10,8 @@ import {
 } from "lucide-react"
 
 import { readCartMembership } from "@/lib/server/request/cart"
-import { getStorefrontProduct } from "@/lib/server/dal/products"
-import { getUserByHandle } from "@/lib/server/dal/users"
 import { getUser } from "@/lib/server/request/session"
+import { appUrl } from "@/lib/server/app-url"
 import { AddToCartButton } from "@/components/add-to-cart-button"
 import { TrackView } from "@/components/analytics/track-view"
 import { DraftBadge } from "@/components/product-card"
@@ -21,29 +19,12 @@ import { ProductGallery } from "@/components/product-gallery"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { formatPrice } from "@/lib/currency"
-import { parseHandleSegment } from "@/lib/utils"
+import { productPath, requestedPath, storefrontPath, withSearchParams } from "@/lib/paths"
+import { productJsonLd, serializeJsonLd } from "@/lib/seo/json-ld"
+import { SITE_OPEN_GRAPH } from "@/lib/site"
+import { toMetaDescription } from "@/lib/utils"
 
-// Resolves the seller from the handle, then the product from that seller, so a
-// product is only reachable under the storefront that actually owns it.
-// cache()d because generateMetadata and the page both need it in one pass.
-//
-// A draft resolves only for its own seller. Everyone else gets null and the
-// page 404s, so a guessed id buys nothing without that seller's session.
-const findProduct = cache(async (handleSegment: string, idSegment: string) => {
-  const id = Number(idSegment)
-  if (!Number.isInteger(id)) return null
-
-  const user = await getUserByHandle(parseHandleSegment(handleSegment))
-  if (!user) return null
-
-  // getUser, not requireUser: the page is public and a signed-out visitor must
-  // still get the published product rather than a redirect to /login.
-  const viewer = await getUser()
-  const product = await getStorefrontProduct(id, user.id, {
-    includeDrafts: viewer?.id === user.id,
-  })
-  return product ? { user, product } : null
-})
+import { findProduct } from "../find-product"
 
 export async function generateMetadata({
   params,
@@ -54,25 +35,45 @@ export async function generateMetadata({
     return { title: "Product not found" }
   }
 
+  const { user, product } = found
+  const description = product.description
+    ? toMetaDescription(product.description)
+    : `${product.name} by ${user.name}. Instant download after checkout.`
+  const canonical = productPath(user.handle, product.id, product.slug)
+
   return {
-    title: found.product.name,
-    description: found.product.description ?? undefined,
+    title: product.name,
+    description,
+    alternates: { canonical },
+    openGraph: { ...SITE_OPEN_GRAPH, title: product.name, description, url: canonical },
     // A draft is already unreachable without its owner's session, so no crawler
     // can see this page. This is the belt to that pair of braces.
-    robots: found.product.status === "draft" ? { index: false } : undefined,
+    robots: product.status === "draft" ? { index: false } : undefined,
   }
 }
 
 export default async function ProductPage({
   params,
+  searchParams,
 }: PageProps<"/[handle]/[id]/[slug]">) {
-  const { handle, id } = await params
+  const { handle, id, slug } = await params
   const found = await findProduct(handle, id)
   if (!found) {
     notFound()
   }
 
   const { user, product } = found
+
+  // One url per product. The id alone finds the row, so any slug, a padded id
+  // (012) or a handle without its @ would otherwise render this same page —
+  // and a rename changes the slug, which must not break links already shared.
+  // All of them 308 to the canonical url, which carries the ranking with it.
+  // The query rides along (a shared link's ?utm_…); the canonical tag has none.
+  const canonical = productPath(user.handle, product.id, product.slug)
+  if (requestedPath(handle, id, slug) !== canonical) {
+    permanentRedirect(withSearchParams(canonical, await searchParams))
+  }
+
   const isDraft = product.status === "draft"
   const price = formatPrice(product.priceInCents)
   const inCart = (await readCartMembership())(product.id)
@@ -83,7 +84,28 @@ export default async function ProductPage({
   const isOwner = viewer?.id === user.id
 
   return (
-    <div className="mx-auto max-w-[1080px] px-6 pt-6 pb-16">
+    <div className="mx-auto max-w-[1080px] px-4 pt-6 pb-16 sm:px-6">
+      {/* Published only: a draft is noindex and only its owner sees it. */}
+      {!isDraft && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: serializeJsonLd(
+              productJsonLd({
+                name: product.name,
+                description: product.description,
+                priceInCents: product.priceInCents,
+                url: `${appUrl}${canonical}`,
+                imageUrls: product.images,
+                seller: {
+                  name: user.name,
+                  url: `${appUrl}${storefrontPath(user.handle)}`,
+                },
+              }),
+            ),
+          }}
+        />
+      )}
       {/* Same owner exclusion as the storefront grid. */}
       {!isOwner && (
         <TrackView
@@ -98,17 +120,17 @@ export default async function ProductPage({
         />
       )}
       <Link
-        href={`/@${user.handle}`}
+        href={storefrontPath(user.handle)}
         className="mb-4 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="size-[15px]" /> All products
       </Link>
-      <div className="grid grid-cols-[1.2fr_1fr] items-start gap-8">
+      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[1.2fr_1fr] md:gap-8">
         <ProductGallery images={product.images} alt={product.name} />
         <div className="flex flex-col gap-4">
           <div>
             <div className="flex items-start gap-2.5">
-              <h1 className="font-heading text-[28px] leading-tight font-medium tracking-[-0.02em]">
+              <h1 className="font-heading text-2xl leading-tight sm:text-[28px] font-medium tracking-[-0.02em]">
                 {product.name}
               </h1>
               {isDraft && <DraftBadge className="mt-1.5 shrink-0" />}

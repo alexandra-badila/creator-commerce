@@ -5,8 +5,9 @@ import { z } from 'zod'
 import { APP_CURRENCY } from '@/lib/currency'
 import { MAX_EXPLORE_QUERY_LENGTH, exploreSort } from '@/lib/schemas/explore'
 import { searchPublishedProducts } from '@/lib/server/dal/products'
-import { productPageLink, truncate } from '@/lib/server/tools/shared'
+import { truncate } from '@/lib/server/tools/shared'
 import { defineTool } from '@/lib/server/tools/types'
+import { productPath } from '@/lib/paths'
 
 const RESULT_LIMIT = 10
 const DESCRIPTION_LIMIT = 200
@@ -25,11 +26,12 @@ export const searchMarketplace = defineTool({
     return {
       currency: APP_CURRENCY,
       results: rows.slice(0, RESULT_LIMIT).map((p) => ({
+        id: p.id,
         name: p.name,
         priceInCents: p.priceInCents,
         sellerHandle: p.sellerHandle,
         description: truncate(p.description, DESCRIPTION_LIMIT),
-        link: productPageLink(p.sellerHandle, p.id, p.slug),
+        link: productPath(p.sellerHandle, p.id, p.slug),
       })),
       exploreLink: query ? `/explore?q=${encodeURIComponent(query)}` : '/explore',
     }

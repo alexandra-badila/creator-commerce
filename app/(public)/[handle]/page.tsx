@@ -1,14 +1,16 @@
 import type { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { notFound, permanentRedirect } from "next/navigation"
 import Link from "next/link"
 
 import { readCartMembership } from "@/lib/server/request/cart"
 import { getStorefrontProducts } from "@/lib/server/dal/products"
 import { getUserByHandle } from "@/lib/server/dal/users"
 import { getUser } from "@/lib/server/request/session"
-import { ProductCard } from "@/components/product-card"
+import { ProductCard, ProductGrid } from "@/components/product-card"
 import { TrackView } from "@/components/analytics/track-view"
-import { parseHandleSegment } from "@/lib/utils"
+import { requestedPath, storefrontPath, withSearchParams } from "@/lib/paths"
+import { SITE_OPEN_GRAPH } from "@/lib/site"
+import { parseHandleSegment, toMetaDescription } from "@/lib/utils"
 
 export async function generateMetadata({
   params,
@@ -19,19 +21,38 @@ export async function generateMetadata({
     return { title: "Storefront not found" }
   }
 
+  const title = `${user.name} (@${user.handle})`
+  const description = user.bio
+    ? toMetaDescription(user.bio)
+    : `Digital products by ${user.name}. Instant download after checkout.`
+  const canonical = storefrontPath(user.handle)
+
   return {
-    title: `${user.name} (@${user.handle})`,
-    description: `Digital products by ${user.name}. Instant download after checkout.`,
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: { ...SITE_OPEN_GRAPH, title, description, url: canonical },
   }
 }
 
 export default async function StorefrontPage({
   params,
+  searchParams,
 }: PageProps<"/[handle]">) {
   const { handle } = await params
   const user = await getUserByHandle(parseHandleSegment(handle))
   if (!user) {
     notFound()
+  }
+
+  // One url per storefront. /gabi resolves too (parseHandleSegment strips an
+  // optional @), so it is sent to /@gabi for links and ranking to collect in
+  // one place. Runs before anything streams, so it is a real 308, not a meta
+  // refresh — adding a loading.tsx above this page would change that. The
+  // query rides along (a shared link's ?utm_…); the canonical tag has none.
+  const canonical = storefrontPath(user.handle)
+  if (requestedPath(handle) !== canonical) {
+    permanentRedirect(withSearchParams(canonical, await searchParams))
   }
 
   // getUser rather than requireUser: this page is public, and a signed-out
@@ -49,7 +70,7 @@ export default async function StorefrontPage({
   ).length
 
   return (
-    <div className="mx-auto max-w-[1080px] px-6 pt-8 pb-16">
+    <div className="mx-auto max-w-[1080px] px-4 pt-6 pb-16 sm:px-6 sm:pt-8">
       {/* Skipped for the owner. A seller refreshing their own storefront would
           otherwise inflate their own denominator, and the sellers who look at
           their page most would show the worst conversion. */}
@@ -60,7 +81,7 @@ export default async function StorefrontPage({
         />
       )}
       <div className="mb-6">
-        <h1 className="font-heading text-3xl font-medium tracking-[-0.02em]">
+        <h1 className="font-heading text-2xl font-medium tracking-[-0.02em] sm:text-3xl">
           Digital products by {user.name}
         </h1>
         <p className="mt-1.5 max-w-[60ch] text-[15px] text-muted-foreground">
@@ -84,7 +105,7 @@ export default async function StorefrontPage({
           </p>
         )
       ) : (
-        <div className="grid grid-cols-3 gap-5">
+        <ProductGrid>
           {products.map((product, index) => (
             <ProductCard
               key={product.id}
@@ -99,7 +120,7 @@ export default async function StorefrontPage({
               preload={index === 0}
             />
           ))}
-        </div>
+        </ProductGrid>
       )}
     </div>
   )

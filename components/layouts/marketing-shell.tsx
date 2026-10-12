@@ -19,6 +19,9 @@ export function MarketingShell({
             <Wordmark className="hidden text-[17px] min-[380px]:inline" />
           </Link>
           <nav className="ml-6 hidden gap-[22px] text-sm md:flex">
+            <Link href="/explore" className="text-muted-foreground hover:text-foreground">
+              Explore
+            </Link>
             <a href="#features" className="text-muted-foreground hover:text-foreground">
               Features
             </a>
